@@ -1,4 +1,5 @@
-import { Activity, BarChart3, Database, Route } from 'lucide-react';
+import { BarChart3, Database, Route } from 'lucide-react';
+import BrandMark from '@/components/BrandMark';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTrafficQuery } from '@/hooks/useTrafficQuery';
@@ -25,7 +26,7 @@ export default function Dashboard() {
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
             <Badge variant="outline" className="w-fit gap-2">
-              <Activity className="h-3.5 w-3.5" />
+              <BrandMark />
               Traffic analytics
             </Badge>
             <div>

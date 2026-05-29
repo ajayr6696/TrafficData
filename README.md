@@ -1,105 +1,136 @@
 # Traffic Data Dashboard
 
-Full-stack traffic analytics dashboard built for the take-home assignment. The app presents country-wise traffic and vehicle-type distribution through interactive Recharts visualizations, backed by a Node.js API and PostgreSQL storage.
+Full-stack traffic analytics web application for the take-home assignment: interactive **country-wise** and **vehicle-type** charts, a **Node.js** API, **PostgreSQL** storage, **Docker**, **unit tests**, and **CI/CD** to **AWS** (GitHub OIDC + ECR + EC2).
 
-## Assignment Coverage
+## Live application
 
-- Frontend: responsive React/Vite UI with interactive country ranking, total trend, vehicle distribution, yearly stacked bars, and cumulative composition charts.
-- Backend: Node.js, Express, AJV request validation, service/repository layers, and CRUD APIs for traffic records.
-- Database: PostgreSQL table `traffic_data`, automatic schema creation, CSV import, calculated aggregate rows, and raw-row updates.
-- Scalability: documented 5 RPS, 50 RPS, and 500 RPS path.
-- Bonus: Dockerfiles, Docker Compose, GitHub Actions CI, GitHub Actions deployment to AWS ECR and a single EC2 instance using GitHub OIDC (no long-lived AWS keys).
+| | |
+| --- | --- |
+| **Production URL** | [http://18.219.123.18/](http://18.219.123.18/) |
+| **Deploy trigger** | Every push to `main` runs GitHub Actions: tests → build Docker images → push to ECR → SSH deploy to EC2 |
 
-## Project Structure
+The dashboard loads traffic data from PostgreSQL on the EC2 host. When you merge or push code to `main`, the pipeline rebuilds images and restarts containers automatically (typically within a few minutes).
+
+---
+
+## Assignment requirements — how this repo answers them
+
+| Requirement | Implementation |
+| --- | --- |
+| **Frontend: two interactive graphs** | **Country-wise:** `TopCountriesBar` (bar), `TotalTrafficTrend` (line). **Vehicle distribution:** `VehicleDistributionDonut` (pie/donut). Additional charts: stacked bar, cumulative area (see [frontend/README.md](frontend/README.md)). |
+| **Clean, responsive UI** | React + Vite + Tailwind CSS + shadcn/ui components; mobile-friendly grid and filters. |
+| **Backend API** | Node.js + Express; JSON REST under `/api/traffic/*`. |
+| **Database (PostgreSQL)** | Table `traffic_data`; CRUD on raw rows with automatic recalculation of chart rows. |
+| **Scalability (5 → 50 → 500 RPS)** | Documented below and in backend README. |
+| **Bonus: Docker** | `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`. |
+| **Bonus: CI/CD** | `.github/workflows/ci.yml` + `deploy-ecr-ec2.yml`. |
+| **Bonus: Unit tests** | Vitest in `backend/tests/` and `frontend/src/**/*.test.ts`. |
+| **README: setup, architecture** | This file + [frontend/README.md](frontend/README.md) + [backend/README.md](backend/README.md). |
+
+---
+
+## System architecture
+
+```mermaid
+flowchart TB
+  subgraph github [GitHub]
+    Dev[Developer push to main]
+    GHA[GitHub Actions]
+  end
+
+  subgraph aws [AWS]
+    OIDC[IAM OIDC role]
+    ECR[Amazon ECR]
+    EC2[EC2 instance]
+    PG[(PostgreSQL container)]
+  end
+
+  User[Browser] -->|HTTP :80| EC2
+  Dev --> GHA
+  GHA -->|AssumeRoleWithWebIdentity| OIDC
+  GHA -->|docker push| ECR
+  GHA -->|SSH deploy| EC2
+  EC2 -->|docker pull| ECR
+  EC2 --> Nginx[Frontend Nginx]
+  Nginx -->|/api proxy| API[Node.js API]
+  API --> PG
+  EC2 -->|mount CSV at deploy| CSV[road_tf CSV on disk]
+  API -->|seed if empty| CSV
+```
+
+**Data path**
+
+1. Source file `road_tf_veh_linear_2_0 2 _ cleaned.csv` lives in the **Git repository** (for local dev and CI).
+2. The CSV is **not** baked into backend Docker images (`.dockerignore` excludes it).
+3. On deploy, GitHub Actions **copies the CSV to the EC2 host** and mounts it into the backend container for one-time/auto seeding.
+4. PostgreSQL on EC2 holds raw + calculated rows after seed.
+
+**Optional local database:** [Supabase](https://supabase.com/) free tier PostgreSQL — set `DATABASE_URL` in `backend/.env`; SSL is enabled automatically for `supabase.co` hosts. See [backend/README.md](backend/README.md).
+
+---
+
+## Project structure
 
 ```text
 TrafficData/
-  backend/
-    scripts/
-    src/
-      controllers/
-      database/
-      dto/
-      middlewares/
-      repositories/
-      routes/
-      schemas/
-      services/
-  deploy/
-    ec2-deploy.sh
-  frontend/
-    src/
-      components/
-      context/
-      hooks/
-      lib/
-      services/
-      types/
   .github/workflows/
-    ci.yml
-    deploy-ecr-ec2.yml
-  docker-compose.yml
-  road_tf_veh_linear_2_0 2 _ cleaned.csv
+    ci.yml                 # Tests on push/PR
+    deploy-ecr-ec2.yml     # Test, ECR push, EC2 deploy
+  backend/                 # Express API (see backend/README.md)
+  frontend/                # React dashboard (see frontend/README.md)
+  deploy/
+    ec2-deploy.sh          # On-server docker compose pull/up
+  docker-compose.yml       # Local: Postgres + backend + frontend
+  road_tf_veh_linear_2_0 2 _ cleaned.csv   # Dataset (in git; not in ECR image)
 ```
 
-## Dataset
+IAM policy templates for AWS setup are kept locally under `deploy/aws/` (gitignored) and are not required on GitHub.
 
-The source dataset is `road_tf_veh_linear_2_0 2 _ cleaned.csv` in the repository root.
+---
 
-CSV columns used by the app:
+## Dataset and database
+
+### CSV columns
 
 | Column | Meaning | Example |
 | --- | --- | --- |
-| `vehicle_id` | Vehicle category code from the source dataset | `CAR`, `LOR`, `TOTAL` |
-| `country_code` | Country code used for filtering and labels | `FR`, `DE`, `UK` |
+| `vehicle_id` | Vehicle category code | `CAR`, `LOR`, `TOTAL` |
+| `country_code` | ISO-style country code | `FR`, `DE`, `UK` |
 | `year` | Reporting year | `2024` |
-| `traffic_volume` | Numeric traffic volume used in all sums/charts | `7494045.604` |
+| `traffic_volume` | Numeric volume | `7494045.604` |
 
-Dataset shape currently loaded:
+### PostgreSQL table `traffic_data`
 
-- Rows: 6,839
-- Year range: 2011-2024
-- Countries: AT Austria, BE Belgium, BG Bulgaria, CH Switzerland, CY Cyprus, CZ Czechia, DE Germany, DK Denmark, EE Estonia, ES Spain, FI Finland, FR France, GE Georgia, HR Croatia, HU Hungary, IE Ireland, IS Iceland, IT Italy, LT Lithuania, LV Latvia, MK North Macedonia, MT Malta, NL Netherlands, NO Norway, PL Poland, PT Portugal, RO Romania, SE Sweden, SI Slovenia, TR Turkiye, UA Ukraine, UK United Kingdom.
-- Source vehicle codes: `BIKE`, `BUS`, `BUS_MCO_MIN`, `BUS_MCO_TRO`, `BUS_TRO`, `CAR`, `LOR`, `LOR_GT3P5-6`, `LOR_GT6`, `LOR_LE3P5`, `MCO`, `MOP`, `MOTO`, `MOTO_MOP`, `RDMVEH_OTH`, `TOTAL`, `TRC`.
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | SERIAL | Primary key |
+| `country_code` | VARCHAR(16) | 32 countries in dataset |
+| `vehicle_id` | VARCHAR(64) | 17 raw codes + calculated parents |
+| `year` | INTEGER | 2011–2024 |
+| `traffic_volume` | NUMERIC | Used in all aggregations |
+| `is_calculated` | BOOLEAN | `false` = raw CSV; `true` = chart-ready row |
 
-## Calculation Rules
+**Countries (32):** AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, MK, MT, NL, NO, PL, PT, RO, SE, SI, TR, UA, UK.
 
-Raw CSV rows are stored with `is_calculated = false`. The backend also creates chart-ready calculated rows with `is_calculated = true`.
+**Raw vehicle codes (17):** BIKE, BUS, BUS_MCO_MIN, BUS_MCO_TRO, BUS_TRO, CAR, LOR, LOR_GT3P5-6, LOR_GT6, LOR_LE3P5, MCO, MOP, MOTO, MOTO_MOP, RDMVEH_OTH, TOTAL, TRC.
 
-Calculated rows are stored in the same PostgreSQL table, `traffic_data`:
+### Calculation rules (summary)
 
-```sql
-SELECT country_code, year, vehicle_id, traffic_volume
-FROM traffic_data
-WHERE is_calculated = TRUE;
-```
+- Raw rows: `is_calculated = false`.
+- Per `(country_code, year)`, the API builds calculated rows (`is_calculated = true`): chart `TOTAL`, rolled-up parents (e.g. `LOR` includes subcategories), and `*_UNIDENTIFIED` buckets for drill-down.
+- Logic: `backend/src/services/trafficNormalization.js`, import: `backend/src/database/trafficDataImport.js`.
 
-For every `(country_code, year)` group:
+---
 
-- Calculated total: `TOTAL = sum(traffic_volume)` across all raw rows for that country and year.
-- `CAR = CAR`
-- `LOR = LOR + LOR_LE3P5 + LOR_GT3P5-6 + LOR_GT6 + TRC`
-- `MOTO = MOTO + MOTO_MOP + MOP`
-- `BUS = BUS + BUS_MCO_TRO + BUS_MCO_MIN + BUS_TRO + MCO`
-- `BIKE = BIKE`
-- `RDMVEH_OTH = RDMVEH_OTH + raw TOTAL`
+## Run locally
 
-Raw top-level vehicle rows are preserved as unidentified child buckets so the charts can distinguish reported parent totals from reported subcategories:
+### Prerequisites
 
-- `CAR_UNIDENTIFIED = raw CAR`
-- `LOR_UNIDENTIFIED = raw LOR`
-- `MOTO_UNIDENTIFIED = raw MOTO`
-- `BUS_UNIDENTIFIED = raw BUS`
-- `BIKE_UNIDENTIFIED = raw BIKE`
-- `RDMVEH_OTH_UNIDENTIFIED = raw RDMVEH_OTH + raw TOTAL`
+- Node.js 22+
+- Docker Desktop (optional, for full stack)
+- PostgreSQL or Supabase URL (optional; or use CSV-only backend mode)
 
-Important distinction: raw `vehicle_id = TOTAL` is treated as "Other unidentified vehicles" inside vehicle distribution charts, while calculated `vehicle_id = TOTAL` is the absolute country/year total.
-
-The calculation implementation lives in `backend/src/services/trafficNormalization.js`. PostgreSQL import and recalculation logic lives in `backend/src/database/trafficDataImport.js`.
-
-## Local Setup
-
-Install dependencies:
+### 1. Install dependencies
 
 ```powershell
 cd D:\TrafficData\backend
@@ -109,82 +140,129 @@ cd D:\TrafficData\frontend
 npm install
 ```
 
-Run backend from the root CSV without PostgreSQL:
-
-```powershell
-cd D:\TrafficData\backend
-npm run dev:csv
-```
-
-Run backend with PostgreSQL from `backend/.env`:
+### 2. Backend
 
 ```powershell
 cd D:\TrafficData\backend
 copy .env.example .env
+# Edit DATABASE_URL for local Postgres or Supabase
+```
+
+**PostgreSQL mode (assignment-complete):**
+
+```powershell
+# From repo root — starts Postgres + seeds from mounted CSV
+docker compose up postgres -d
+
+cd D:\TrafficData\backend
 npm run dev:postgres
 ```
 
-Run frontend:
+**CSV-only mode (quick UI check without DB):**
+
+```powershell
+npm run dev:csv
+```
+
+API: `http://localhost:4000` — health: `GET /api/health`
+
+**One-time import (Supabase or local Postgres):**
+
+```powershell
+$env:DATABASE_URL="postgres://..."
+$env:CSV_PATH="D:\TrafficData\road_tf_veh_linear_2_0 2 _ cleaned.csv"
+npm run import:data -- --truncate
+```
+
+### 3. Frontend
 
 ```powershell
 cd D:\TrafficData\frontend
+copy .env.example .env
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173`; backend runs at `http://localhost:4000`.
+App: `http://localhost:5173` (proxies API to port 4000 in dev via Vite config / env).
 
-## Docker
-
-Local full-stack Docker run:
+### 4. Full stack with Docker Compose
 
 ```powershell
 cd D:\TrafficData
 docker compose up --build
 ```
 
-Docker Compose starts:
+| Service | URL |
+| --- | --- |
+| Frontend | http://localhost:8080 |
+| Backend | http://localhost:4000 |
+| PostgreSQL | localhost:5432 |
 
-- PostgreSQL on `localhost:5432`
-- Backend API on `localhost:4000`
-- Frontend on `localhost:8080`
+---
 
-The production backend image does not include the CSV file. The root CSV is excluded from Docker builds by `.dockerignore`, so it is not pushed to ECR. During deployment, GitHub Actions copies the CSV to the EC2 host and mounts it into the backend container so PostgreSQL can seed itself on first startup.
+## CI/CD pipeline (GitHub Actions + AWS)
 
-## Production Data Import
+Two workflows run on pushes to `main` (deploy also supports manual **workflow_dispatch**).
 
-On EC2, PostgreSQL runs in Docker on the same instance. The backend seeds the database automatically from the mounted CSV when the table is empty. To re-import manually on the EC2 host:
+### Workflow 1: `ci.yml` (quality gate)
 
-```bash
-docker exec traffic-backend npm run import:data -- --truncate
+| Job | Steps |
+| --- | --- |
+| **backend** | `npm ci` → `npm test` |
+| **frontend** | `npm ci` → `npm test` → `npm run build` |
+
+Runs on **pull requests** and **pushes** to `main`.
+
+### Workflow 2: `deploy-ecr-ec2.yml` (build & deploy)
+
+```mermaid
+sequenceDiagram
+  participant GH as GitHub Actions
+  participant IAM as AWS IAM OIDC
+  participant ECR as Amazon ECR
+  participant EC2 as EC2 host
+
+  GH->>GH: quality job (tests + frontend build)
+  GH->>IAM: AssumeRoleWithWebIdentity
+  IAM-->>GH: temporary AWS credentials
+  GH->>ECR: docker build + push backend/frontend
+  GH->>EC2: SSH — copy ec2-deploy.sh + CSV
+  alt EC2 has IAM instance profile
+    EC2->>ECR: docker login + pull (instance role)
+  else
+    GH->>EC2: docker login using CI token
+  end
+  EC2->>EC2: docker compose up (Postgres + API + Nginx)
 ```
 
-## API
+| Step | What happens |
+| --- | --- |
+| **quality** | Same tests as CI — deploy blocked if tests fail. |
+| **Configure AWS credentials** | `aws-actions/configure-aws-credentials@v4` with `AWS_ROLE_TO_ASSUME` (no stored access keys). |
+| **Login to ECR** | Push images tagged with `github.sha` and `latest`. |
+| **Copy deploy assets** | `scp` `deploy/ec2-deploy.sh` and CSV to `/opt/traffic-data/` on EC2. |
+| **Run deploy on EC2** | `docker compose pull && up -d` for Postgres, backend, frontend. |
 
-Health:
+### AWS services used
 
-- `GET /api/health`
+| Service | Purpose |
+| --- | --- |
+| **IAM OIDC provider** | Trust `token.actions.githubusercontent.com` for GitHub Actions. |
+| **IAM role (GitHub)** | ECR push (+ pull token fallback for deploy). |
+| **Amazon ECR** | Private registry for `traffic-data-backend` and `traffic-data-frontend`. |
+| **Amazon EC2** | Single host running Docker Compose (Postgres + app). |
+| **IAM role (EC2)** | ECR pull on the instance (recommended). |
 
-Traffic metadata and reads:
+No RDS, SSM, or Lambda in the current pipeline.
 
-- `GET /api/traffic/filters`
-- `GET /api/traffic`
-- `GET /api/traffic/trend`
-- `GET /api/traffic/top-countries`
-- `GET /api/traffic/distribution`
-- `GET /api/traffic/hierarchy-distribution`
-- `GET /api/traffic/deep-dive`
-- `GET /api/traffic/stacked`
-- `GET /api/traffic/hierarchy-yearly`
-- `GET /api/traffic/compare`
-- `GET /api/traffic/cumulative`
+### GitHub configuration
 
-Data updates:
+**Variables:** `AWS_REGION`, `AWS_ROLE_TO_ASSUME`, `EC2_HOST`, `FRONTEND_ORIGIN`, optional `EC2_USER`, ECR repo names.
 
-- `POST /api/traffic`
-- `PUT /api/traffic/:id`
-- `DELETE /api/traffic/:id`
+**Secrets:** `EC2_SSH_PRIVATE_KEY`, `POSTGRES_PASSWORD`.
 
-In PostgreSQL mode, create/update/delete operations are limited to raw rows and then rebuild calculated rows so totals stay consistent.
+Detailed AWS console steps were documented during initial setup; IAM JSON templates live in local `deploy/aws/`.
+
+---
 
 ## Tests
 
@@ -196,217 +274,73 @@ cd D:\TrafficData\frontend
 npm test
 ```
 
-The existing `.github/workflows/ci.yml` runs backend tests, frontend tests, and frontend build on pushes to `main` and on pull requests.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  Browser["Browser"] --> Nginx["Frontend Nginx container"]
-  Nginx --> React["React static assets"]
-  Nginx -->|/api proxy| API["Node.js Express API"]
-  API --> Service["TrafficService"]
-  Service --> Repo["PostgreSQL repository"]
-  Repo --> DB["PostgreSQL traffic_data"]
-  Service --> Importer["Manual CSV import/recalculation"]
-  Importer --> DB
-```
-
-The frontend is a Vite React app using Tailwind CSS, shadcn-style primitives, lucide icons, and Recharts. The production Nginx image serves the React build and proxies `/api` to the backend container.
-
-The backend is stateless. Controllers validate requests with AJV, DTOs normalize query/body values, services own chart semantics, and repositories isolate data persistence. PostgreSQL is preferred when `DATABASE_URL` is present; CSV mode is available for local debugging.
-
-## Scaling Plan
-
-At 5 RPS:
-
-- One Node.js API instance and one PostgreSQL instance are enough.
-- CSV mode is acceptable for local review; PostgreSQL mode is preferred for assignment completeness.
-- Use simple indexes already created by startup migrations.
-
-At 50 RPS:
-
-- Run frontend and backend containers behind an Application Load Balancer.
-- Run multiple backend containers.
-- Move PostgreSQL to a managed database or a dedicated EC2 volume with automated snapshots.
-- Cache common chart queries for popular countries/years.
-- Add API request logging and slow-query logging.
-
-At 500 RPS:
-
-- Use ECS/Fargate or Kubernetes instead of one EC2 host.
-- Add read replicas or move heavy chart reads to a replicated analytics database.
-- Add Redis/ElastiCache for aggregate responses.
-- Precompute materialized aggregate views by country/year/vehicle.
-- Add autoscaling policies, CloudWatch alarms, tracing, and database connection pooling.
-
-## AWS CI/CD Deployment
-
-This repository includes `.github/workflows/deploy-ecr-ec2.yml`. Hosting uses only three AWS services:
-
-- **GitHub OIDC** (IAM identity provider) for short-lived AWS credentials in GitHub Actions
-- **Amazon ECR** for container images
-- **Amazon EC2** for the running app (frontend, backend, and PostgreSQL all run as Docker containers on one instance)
-
-No RDS, SSM, or other AWS services are required.
-
-On push to `main`, the workflow:
-
-1. Runs backend and frontend tests.
-2. Uses GitHub OIDC to assume an AWS IAM role. No long-lived AWS access keys are stored in GitHub.
-3. Builds and pushes backend and frontend Docker images to Amazon ECR.
-4. SSHs into the EC2 instance, copies the deploy script and CSV, pulls the new images, and restarts containers with Docker Compose.
-
-### GitHub repository variables
-
-Add these under **Settings → Secrets and variables → Actions → Variables** (Secrets work too; the workflow checks Variables first):
-
-| Name | Example | Required |
+| Area | Files | Focus |
 | --- | --- | --- |
-| `AWS_REGION` | `us-east-1` | Yes |
-| `AWS_ROLE_TO_ASSUME` | `arn:aws:iam::<account-id>:role/traffic-data-github-actions-role` | Yes |
-| `EC2_HOST` | `ec2-1-2-3-4.compute.amazonaws.com` or public IP | Yes |
-| `EC2_USER` | `ec2-user` | No (defaults to `ec2-user`) |
-| `FRONTEND_ORIGIN` | `http://<ec2-public-dns>` | Yes |
-| `ECR_BACKEND_REPOSITORY` | `traffic-data-backend` | No (has default) |
-| `ECR_FRONTEND_REPOSITORY` | `traffic-data-frontend` | No (has default) |
+| Backend | `traffic.service.test.js`, `trafficNormalization.test.js` | Chart query semantics, vehicle rollups, cumulative math |
+| Frontend | `chartTransforms.test.ts`, `format.test.ts`, `filterDefaults.test.ts` | Data shaping, formatting, filter defaults |
 
-### GitHub repository secrets
+CI runs these on every push and before deploy.
 
-Add these under **Settings → Secrets and variables → Actions → Secrets**:
+---
 
-| Name | Description |
+## Scalability (5 → 50 → 500 RPS)
+
+| Target | Design |
 | --- | --- |
-| `EC2_SSH_PRIVATE_KEY` | Full PEM contents of the EC2 key pair used to launch the instance |
-| `POSTGRES_PASSWORD` | Password for the PostgreSQL container on EC2 (choose a strong value) |
+| **5 RPS** | One EC2 instance (current), one Postgres container, indexed `traffic_data` table. |
+| **50 RPS** | Application Load Balancer in front of multiple EC2 instances or target groups; managed PostgreSQL (RDS or Supabase Pro); Redis/ElastiCache for `/api/traffic/*` aggregate caching; connection pooling (PgBouncer). |
+| **500 RPS** | **ECS or Fargate** for stateless API and frontend tasks with autoscaling; read replicas for analytics queries; precomputed materialized views; API rate limiting; CloudWatch + X-Ray tracing. |
 
-## AWS Console Steps
+---
 
-Use one AWS Region for all resources, for example `us-east-1`.
+## Future improvements
 
-### Step 1. Create an EC2 key pair
+| Area | Idea |
+| --- | --- |
+| **Assets / performance** | Store logo and static assets in **S3 + CloudFront** instead of bundling in the frontend image — faster global render and smaller deploy artifacts. |
+| **HTTPS / domain** | Register a domain (Route 53), issue **ACM** certificate, terminate TLS on **ALB** or CloudFront instead of plain HTTP on EC2. |
+| **Load balancing** | Put an **ALB** in front of several EC2 instances (or ECS tasks) for HA and horizontal scale. |
+| **Containers** | Move from single-host Compose to **ECS Fargate** or **EKS** with task autoscaling. |
+| **Database** | **RDS PostgreSQL** or Supabase with read replicas; migrate off containerized Postgres on EC2. |
+| **Cache** | **ElastiCache (Redis)** for filter metadata and heavy chart endpoints (TTL per country/year). |
+| **Async updates** | On raw row **POST/PUT/DELETE**, publish to **SQS**; **Lambda** or worker tasks recalculate aggregates instead of blocking the request path. |
+| **IaC** | **Terraform** or AWS CDK for VPC, EC2/ECS, ECR, IAM OIDC, ALB, RDS, and secrets — reproducible environments. |
+| **CI/CD** | Separate staging workflow; smoke tests against `/api/health` after deploy; blue/green on ECS. |
+| **Observability** | Structured logs to CloudWatch, alarms on 5xx rate and p95 latency. |
+| **Security** | Restrict SSH to GitHub IP ranges; AWS Secrets Manager for `POSTGRES_PASSWORD`; IMDSv2 on EC2. |
 
-1. Open **EC2 → Key pairs → Create key pair**.
-2. Name it `traffic-data-deploy`, type RSA, format `.pem`.
-3. Download the `.pem` file. You will paste its contents into the GitHub `EC2_SSH_PRIVATE_KEY` secret.
+---
 
-### Step 2. Launch the EC2 instance
+## API reference (short)
 
-1. Open **EC2 → Launch instance**.
-2. Name: `traffic-data-prod`.
-3. AMI: **Amazon Linux 2023**.
-4. Instance type: `t3.small` or larger.
-5. Key pair: select `traffic-data-deploy`.
-6. Create or select a security group with:
-   - Inbound **HTTP 80** from `0.0.0.0/0` (public web access)
-   - Inbound **SSH 22** from your IP or GitHub Actions IP ranges (required for deploy)
-   - Outbound **HTTPS 443** to `0.0.0.0/0` (ECR pulls)
-7. Storage: at least **20 GiB** (PostgreSQL data + Docker images).
-8. Advanced details → **IAM instance profile**: create and attach a profile with ECR pull permissions (Step 4 below).
-9. Advanced details → **User data** (paste this script):
+- `GET /api/health`
+- `GET /api/traffic/filters` — metadata for UI filters
+- `GET /api/traffic/trend` — country line chart
+- `GET /api/traffic/top-countries` — country bar chart
+- `GET /api/traffic/distribution` — vehicle donut
+- `GET /api/traffic/stacked`, `/cumulative`, `/compare`, …
+- `POST|PUT|DELETE /api/traffic` — mutate raw rows (PostgreSQL recalculates)
 
-```bash
-#!/bin/bash
-dnf update -y
-dnf install -y docker awscli
-systemctl enable --now docker
-usermod -aG docker ec2-user
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
-  -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-mkdir -p /opt/traffic-data/data
-chown -R ec2-user:ec2-user /opt/traffic-data
-```
+Full list: [backend/README.md](backend/README.md).
 
-10. Launch the instance and note its **public DNS** (for `EC2_HOST` and `FRONTEND_ORIGIN`).
+---
 
-### Step 3. Create ECR repositories
-
-Create two private repositories, or let the workflow create them automatically:
-
-- `traffic-data-backend`
-- `traffic-data-frontend`
-
-### Step 4. IAM role for the EC2 instance
-
-1. Open **IAM → Roles → Create role**.
-2. Trusted entity: **AWS service → EC2**.
-3. Attach an inline policy using `deploy/aws/ec2-instance-inline-policy.json` (replace `<region>` and `<account-id>`).
-4. Name the role `traffic-data-ec2-role`.
-5. Attach this role to the EC2 instance (**Actions → Security → Modify IAM role**).
-
-The EC2 instance only needs permission to pull images from ECR.
-
-### Step 5. IAM OIDC provider for GitHub Actions
-
-1. Open **IAM → Identity providers → Add provider**.
-2. Provider type: **OpenID Connect**.
-3. Provider URL: `https://token.actions.githubusercontent.com`
-4. Audience: `sts.amazonaws.com`
-
-If the provider already exists in your account, skip this step.
-
-### Step 6. IAM role for GitHub Actions
-
-1. Open **IAM → Roles → Create role**.
-2. Trusted entity: **Web identity**.
-3. Identity provider: `token.actions.githubusercontent.com`.
-4. Audience: `sts.amazonaws.com`.
-5. Use the trust policy in `deploy/aws/github-actions-trust-policy.json` (replace `<account-id>`, `<github-owner>`, `<github-repo>`).
-6. Attach an inline policy using `deploy/aws/github-actions-permissions-policy.json` (replace `<region>` and `<account-id>`).
-7. Name the role `traffic-data-github-actions-role`.
-8. Copy the role ARN into the GitHub `AWS_ROLE_TO_ASSUME` variable.
-
-The GitHub Actions role only needs permission to push images to ECR.
-
-### Step 7. Configure GitHub
-
-1. Open your repository on GitHub → **Settings → Secrets and variables → Actions**.
-2. Add the **Variables** and **Secrets** listed in the AWS CI/CD Deployment section above.
-3. Set `FRONTEND_ORIGIN` to `http://<your-ec2-public-dns>`.
-
-### Step 8. Push to main
-
-Push to `main`. Both `ci.yml` and `deploy-ecr-ec2.yml` run. The deploy workflow builds images, pushes to ECR, and deploys to EC2 over SSH.
-
-### Step 9. Verify the deployment
-
-1. Open `http://<ec2-public-dns>` in a browser.
-2. SSH to the instance and check containers:
-
-```bash
-docker ps
-curl -s http://localhost/api/health
-```
-
-3. Confirm data loaded:
-
-```bash
-docker exec traffic-backend node -e "
-  import('./src/database/trafficDataImport.js').then(async (m) => {
-    const counts = await m.getTrafficTableCounts();
-    console.log(counts);
-    process.exit(0);
-  });
-"
-```
-
-## Useful Queries
-
-Check raw vs calculated rows:
+## Useful SQL
 
 ```sql
-SELECT is_calculated, COUNT(*)
-FROM traffic_data
-GROUP BY is_calculated;
-```
+SELECT is_calculated, COUNT(*) FROM traffic_data GROUP BY is_calculated;
 
-Check calculated totals:
-
-```sql
 SELECT country_code, year, vehicle_id, traffic_volume
 FROM traffic_data
 WHERE is_calculated = TRUE
-ORDER BY country_code, year, vehicle_id;
+ORDER BY country_code, year, vehicle_id
+LIMIT 20;
 ```
+
+---
+
+## Repository links
+
+- **Frontend details (charts, Tailwind, shadcn, folder layout):** [frontend/README.md](frontend/README.md)
+- **Backend details (API layers, DB, Supabase, tests):** [backend/README.md](backend/README.md)
+- **GitHub:** https://github.com/ajayr6696/TrafficData

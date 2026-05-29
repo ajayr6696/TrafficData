@@ -1,95 +1,165 @@
 # Traffic Data Backend
 
-Node.js + Express API for traffic analytics. The API prefers PostgreSQL when `DATABASE_URL` is present and falls back to the CSV repository otherwise.
+Node.js + **Express** API for the traffic analytics assignment. Data is stored in **PostgreSQL** when `DATABASE_URL` is set; a **CSV repository** is available for local debugging without a database.
 
-CSV rows are normalized in memory when the API first loads the data. PostgreSQL startup and import paths use the same calculated-row normalization.
+## How this folder was created
 
-## Setup
+1. **Express** app with ES modules (`"type": "module"` in `package.json`).
+2. Layered layout: **routes → controllers → services → repositories** (plus DTOs and AJV schemas).
+3. **PostgreSQL** access via `postgres` (`src/database/db.js`, `pool.js`) with startup migrations.
+4. **CSV import** and calculated-row pipeline in `trafficDataImport.js` + `trafficNormalization.js`.
+5. **Vitest** for unit tests on business logic (no DB required for most tests).
+
+## Folder structure
+
+```text
+backend/
+  scripts/
+    importData.js           # CLI: import CSV into PostgreSQL (--truncate optional)
+    runCsv.js               # Dev server using CSV repository only
+    runPostgres.js          # Dev server using DATABASE_URL
+  src/
+    controllers/            # HTTP handlers
+    database/
+      db.js                 # postgres.js client (Supabase SSL when URL contains supabase.co)
+      migrations.js         # CREATE TABLE traffic_data + indexes
+      trafficDataImport.js  # CSV seed, batch insert, recalculate aggregates
+      pool.js               # query() wrapper
+    dto/                    # Request/response shaping
+    middlewares/            # AJV validation, errors, 404
+    repositories/
+      traffic.repository.js # PostgreSQL queries for charts and CRUD
+      csvTraffic.repository.js
+    routes/
+      traffic.js            # /api/traffic/*
+    schemas/                # JSON Schema (AJV) for query/body validation
+    services/
+      traffic.service.js    # Chart semantics, labels, aggregation rules
+      trafficNormalization.js
+    constants/
+      config.js
+      trafficMetadata.js    # Country names, vehicle labels, hierarchy
+    app.js
+    index.js                # Start server, migrate, seed if empty
+  tests/
+    traffic.service.test.js
+    trafficNormalization.test.js
+```
+
+## Database
+
+### Table: `traffic_data`
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `SERIAL` | Primary key |
+| `country_code` | `VARCHAR(16)` | e.g. `AT`, `DE`, `UK` |
+| `vehicle_id` | `VARCHAR(64)` | Raw or calculated vehicle code |
+| `year` | `INTEGER` | Reporting year (2011–2024 in dataset) |
+| `traffic_volume` | `NUMERIC` | Volume used in charts |
+| `is_calculated` | `BOOLEAN` | `false` = raw CSV row; `true` = derived chart row |
+
+Indexes exist on `(country_code, year)`, `(vehicle_id, year)`, `(country_code, vehicle_id, year)`, and a partial-friendly composite including `is_calculated`.
+
+### Countries in the dataset (32)
+
+AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, MK, MT, NL, NO, PL, PT, RO, SE, SI, TR, UA, UK — labels in `trafficMetadata.js`.
+
+### Source vehicle codes in CSV (17)
+
+`BIKE`, `BUS`, `BUS_MCO_MIN`, `BUS_MCO_TRO`, `BUS_TRO`, `CAR`, `LOR`, `LOR_GT3P5-6`, `LOR_GT6`, `LOR_LE3P5`, `MCO`, `MOP`, `MOTO`, `MOTO_MOP`, `RDMVEH_OTH`, `TOTAL`, `TRC`.
+
+Calculated parent rows (e.g. rolled-up `LOR`, `BUS`, chart `TOTAL`) are stored with `is_calculated = true`. See root `README.md` for normalization rules.
+
+### Supabase (free PostgreSQL) — local / optional hosted DB
+
+You can use [Supabase](https://supabase.com/) as a managed PostgreSQL instance instead of local Docker Postgres:
+
+1. Create a project → **Settings → Database** → copy the connection string (pooler port `6543` is fine for the API).
+2. Set in `backend/.env`:
+
+```env
+DATABASE_URL=postgres://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+```
+
+3. `src/database/db.js` enables SSL automatically when the host contains `supabase.co`.
+4. Import data once from your machine:
 
 ```bash
-cd D:\TrafficData\backend
+npm run import:data -- --truncate
+```
+
+**Production on AWS (this repo’s default deploy):** PostgreSQL runs in Docker on the **EC2** instance; Supabase is optional for development only.
+
+## API (assignment: deliver traffic data + updates)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/traffic/filters` | Countries, vehicles, year ranges |
+| `GET` | `/api/traffic` | Filtered raw rows |
+| `GET` | `/api/traffic/trend` | Country total trend (line chart) |
+| `GET` | `/api/traffic/top-countries` | Country ranking (bar chart) |
+| `GET` | `/api/traffic/distribution` | Vehicle share (pie/donut) |
+| `GET` | `/api/traffic/stacked` | Yearly stacked mix |
+| `GET` | `/api/traffic/cumulative` | Cumulative composition |
+| `POST` | `/api/traffic` | Create raw row (recalculates aggregates in PG mode) |
+| `PUT` | `/api/traffic/:id` | Update raw row |
+| `DELETE` | `/api/traffic/:id` | Delete raw row |
+
+Aggregate reads use calculated `TOTAL` and parent vehicle IDs; raw `TOTAL` in CSV means “other unidentified vehicles” in distribution views.
+
+## Setup and run locally
+
+```bash
+cd backend
 npm install
 copy .env.example .env
 ```
 
-Update `CSV_PATH` in `.env` only if your CSV is in a different location. Set `DATABASE_URL` to point at PostgreSQL when you want the backend to use the database instead of CSV.
+**Option A — PostgreSQL (recommended, matches assignment)**
 
 ```bash
-npm run dev
+# Start Postgres (Docker Compose from repo root, or Supabase DATABASE_URL in .env)
+npm run dev:postgres
 ```
 
-The API runs at `http://localhost:4000`.
-
-## Debug Commands
+**Option B — CSV only (no database)**
 
 ```bash
-# Run with automatic restart
-npm run dev
-
-# Run once with the Node debugger on chrome://inspect
-npm run debug
-
-# Run with debugger and automatic restart
-npm run debug:watch
+npm run dev:csv
 ```
 
-## CSV Data Source
+API: `http://localhost:4000`
 
-The CSV must have these columns:
+**Import CSV into PostgreSQL**
 
-```text
-vehicle_id,country_code,year,traffic_volume
+```bash
+set DATABASE_URL=postgres://...
+set CSV_PATH=D:\TrafficData\road_tf_veh_linear_2_0 2 _ cleaned.csv
+npm run import:data -- --truncate
 ```
-
-The API assigns in-memory row IDs when it loads the CSV. `POST`, `PUT`, and `DELETE` mutate the in-memory dataset for the current server process; restarting the backend reloads from the CSV file. With PostgreSQL enabled, the same endpoints use the database-backed repository instead.
-
-## PostgreSQL Table For Later
-
-```sql
-CREATE TABLE traffic_data (
-  id SERIAL PRIMARY KEY,
-  country_code VARCHAR(16) NOT NULL,
-  vehicle_id VARCHAR(64) NOT NULL,
-  year INTEGER NOT NULL,
-  traffic_volume NUMERIC NOT NULL,
-  is_calculated BOOLEAN NOT NULL DEFAULT FALSE
-);
-```
-
-When PostgreSQL is enabled, indexes are created automatically on startup/import for country, vehicle, year, and calculated-row filters.
-
-## API
-
-- `GET /api/health`
-- `GET /api/traffic/filters`
-- `GET /api/traffic?country_code=AT&vehicle_id=CAR&start_year=2015&end_year=2020`
-- `POST /api/traffic`
-- `PUT /api/traffic/:id`
-- `DELETE /api/traffic/:id`
-- `GET /api/traffic/trend?country_code=AT&start_year=2015&end_year=2020`
-- `GET /api/traffic/top-countries?year=2020&limit=10`
-- `GET /api/traffic/distribution?country_code=AT&year=2020`
-- `GET /api/traffic/stacked?country_code=AT&start_year=2015&end_year=2020`
-- `GET /api/traffic/compare?country_a=AT&country_b=FI&start_year=2015&end_year=2020`
-- `GET /api/traffic/cumulative?country_code=AT&start_year=2015&end_year=2020`
-
-Aggregate trend endpoints and the default country ranking use calculated `vehicle_id = 'TOTAL'` rows. Raw `vehicle_id = 'TOTAL'` is treated as `Other unidentified vehicles` everywhere else.
-
-Normalization rules:
-
-- Every raw row remains available with `is_calculated = false`.
-- For each country/year, the calculated absolute total is inserted as `vehicle_id = 'TOTAL'` with `is_calculated = true`.
-- Raw parent rows are preserved as unidentified child buckets for their parent class.
-- Raw `TOTAL` rows are preserved as `Other unidentified vehicles` under `RDMVEH_OTH`.
-- Calculated parent rows are inserted with `is_calculated = true`, for example `LOR = LOR + LOR_LE3P5 + LOR_GT3P5-6 + LOR_GT6 + TRC` and `BUS = BUS_MCO_TRO + BUS_MCO_MIN + BUS + BUS_TRO + MCO`.
-- The frontend source-category stat uses the 17 raw CSV vehicle categories and exposes the full list on hover.
 
 ## Tests
+
+| File | What it verifies |
+| --- | --- |
+| `tests/traffic.service.test.js` | Service calls repositories with correct `vehicle_id` / `is_calculated` flags; cumulative composition math; deep-dive vehicle lists. |
+| `tests/trafficNormalization.test.js` | Empty input, BUS rollups, per-country isolation in calculated rows. |
+| `tests/traffic.service.test.js` (existing) | Core chart semantics aligned with `buildCalculatedTrafficRows`. |
 
 ```bash
 npm test
 ```
 
-## Scaling Notes
+Tests use **Vitest** and **mocked repositories** — no live PostgreSQL required in CI.
 
-At 5 RPS in CSV mode, one API instance with an in-memory parsed CSV cache is sufficient. At 50 RPS, keep the API stateless and add response caching for common chart filters. At 500 RPS, use PostgreSQL, add read replicas, Redis caching for dashboard aggregates, precomputed materialized views by year/country/vehicle, horizontal API autoscaling, and query-level observability to keep slow aggregations visible.
+## Scaling (assignment requirement)
+
+| Load | Approach |
+| --- | --- |
+| **5 RPS** | Single API process + single PostgreSQL; indexes from migrations. |
+| **50 RPS** | Multiple API instances behind a load balancer; cache hot filter queries; managed Postgres backups. |
+| **500 RPS** | ECS/Fargate or Kubernetes; read replicas; Redis for aggregate cache; materialized views; autoscaling and tracing. |
+
+See root `README.md` for CI/CD and future improvements (Lambda, SQS, Terraform, etc.).
