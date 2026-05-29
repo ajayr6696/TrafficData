@@ -117,7 +117,7 @@ That combination supports both required views (country-wise traffic and vehicle-
 | `id` | SERIAL | Primary key |
 | `country_code` | VARCHAR(16) | 32 countries in dataset |
 | `vehicle_id` | VARCHAR(64) | 17 raw codes + calculated parents |
-| `year` | INTEGER | 2011–2024 |
+| `year` | INTEGER | 2011-2024 |
 | `traffic_volume` | NUMERIC | Used in all aggregations |
 | `is_calculated` | BOOLEAN | `false` = raw CSV; `true` = chart-ready row |
 

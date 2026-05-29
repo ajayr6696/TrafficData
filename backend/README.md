@@ -57,7 +57,7 @@ backend/
 | `id` | `SERIAL` | Primary key |
 | `country_code` | `VARCHAR(16)` | e.g. `AT`, `DE`, `UK` |
 | `vehicle_id` | `VARCHAR(64)` | Raw or calculated vehicle code |
-| `year` | `INTEGER` | Reporting year (2011–2024 in dataset) |
+| `year` | `INTEGER` | Reporting year (2011-2024 in dataset) |
 | `traffic_volume` | `NUMERIC` | Volume used in charts |
 | `is_calculated` | `BOOLEAN` | `false` = raw CSV row; `true` = derived chart row |
 
