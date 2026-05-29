@@ -90,6 +90,17 @@ IAM policy templates for AWS setup are kept locally under `deploy/aws/` (gitigno
 
 ## Dataset and database
 
+### Data source
+
+The traffic figures come from **[Eurostat — Road traffic (vehicles)](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en)** (`road_tf_veh`), exported and cleaned into `road_tf_veh_linear_2_0 2 _ cleaned.csv` in this repository.
+
+**Why this dataset:** it matches the assignment’s two analytical dimensions in one table:
+
+1. **Traffic volume** — reported in **million vehicle-kilometres (VKM)** (`traffic_volume` in the app), suitable for country totals and time trends.
+2. **Vehicle type** — broken down by `vehicle_id` (cars, lorries, buses, motorcycles, etc.), suitable for distribution and composition charts.
+
+That combination supports both required views (country-wise traffic and vehicle-type distribution) without merging separate datasets.
+
 ### CSV columns
 
 | Column | Meaning | Example |
@@ -97,7 +108,7 @@ IAM policy templates for AWS setup are kept locally under `deploy/aws/` (gitigno
 | `vehicle_id` | Vehicle category code | `CAR`, `LOR`, `TOTAL` |
 | `country_code` | ISO-style country code | `FR`, `DE`, `UK` |
 | `year` | Reporting year | `2024` |
-| `traffic_volume` | Numeric volume | `7494045.604` |
+| `traffic_volume` | Traffic in million vehicle-kilometres (VKM) from Eurostat | `7494045.604` |
 
 ### PostgreSQL table `traffic_data`
 

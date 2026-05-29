@@ -2,6 +2,8 @@
 
 Node.js + **Express** API for the traffic analytics assignment. Data is stored in **PostgreSQL** when `DATABASE_URL` is set; a **CSV repository** is available for local debugging without a database.
 
+**Dataset:** [Eurostat `road_tf_veh`](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en) (million vehicle-kilometres by country, year, and vehicle type). See root `README.md` for source rationale.
+
 ## How this folder was created
 
 1. **Express** app with ES modules (`"type": "module"` in `package.json`).

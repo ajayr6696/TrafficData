@@ -4,6 +4,8 @@ React + Vite dashboard for the traffic analytics assignment. Layout and UI chrom
 
 **Live app (production):** opened through the root README — the browser tab uses the same **Activity** pulse icon as the “Traffic analytics” badge in the header (`/favicon.svg` + `BrandMark` component).
 
+**Dataset:** [Eurostat `road_tf_veh`](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en) — million VKM by country, year, and vehicle type (see root README for why this source was chosen).
+
 ## How this folder was created
 
 1. **Vite + React + TypeScript** scaffold (`npm create vite@latest` pattern).
