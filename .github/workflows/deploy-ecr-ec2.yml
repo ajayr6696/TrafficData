@@ -103,52 +103,92 @@ jobs:
           docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG"
           docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest"
 
-      - name: Deploy to EC2 over SSH
+      - name: Validate deploy configuration
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           if [ -z "$EC2_HOST" ]; then
-            echo "EC2_HOST repository variable or secret is required."
+            echo "::error::EC2_HOST variable or secret is required (public DNS or IP only, not a URL)."
             exit 1
           fi
 
           if [ -z "$EC2_SSH_PRIVATE_KEY" ]; then
-            echo "EC2_SSH_PRIVATE_KEY secret is required."
+            echo "::error::EC2_SSH_PRIVATE_KEY secret is required."
             exit 1
           fi
 
           if [ -z "$POSTGRES_PASSWORD" ]; then
-            echo "POSTGRES_PASSWORD secret is required."
+            echo "::error::POSTGRES_PASSWORD secret is required."
             exit 1
           fi
 
-          mkdir -p ~/.ssh
-          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          EC2_HOST="${EC2_HOST#http://}"
+          EC2_HOST="${EC2_HOST#https://}"
+          EC2_HOST="${EC2_HOST%%/*}"
+          echo "EC2_HOST=$EC2_HOST" >> "$GITHUB_ENV"
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          if ! printf '%s' "$EC2_SSH_PRIVATE_KEY" | tr -d '\r' | grep -q 'BEGIN.*PRIVATE KEY'; then
+            echo "::error::EC2_SSH_PRIVATE_KEY must be the full .pem file including BEGIN/END lines."
+            exit 1
+          fi
+
+      - name: Check SSH port is reachable
+        run: |
+          if ! timeout 15 bash -c "echo > /dev/tcp/${EC2_HOST}/22" 2>/dev/null; then
+            echo "::error::Cannot reach ${EC2_HOST}:22. In the EC2 security group, allow inbound SSH (port 22) from GitHub Actions (see https://api.github.com/meta) or temporarily from 0.0.0.0/0."
+            exit 1
+          fi
+          echo "SSH port 22 is reachable on ${EC2_HOST}"
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Add EC2 host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Test SSH connection
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "echo 'SSH OK' && command -v docker && command -v aws"
+
+      - name: Copy deploy assets to EC2
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
             "$EC2_USER@$EC2_HOST" "mkdir -p /opt/traffic-data/data"
 
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          scp -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
             deploy/ec2-deploy.sh \
             "$EC2_USER@$EC2_HOST:/opt/traffic-data/ec2-deploy.sh"
 
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          scp -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
             "road_tf_veh_linear_2_0 2 _ cleaned.csv" \
             "$EC2_USER@$EC2_HOST:/opt/traffic-data/data/"
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
             "$EC2_USER@$EC2_HOST" \
-            "chmod +x /opt/traffic-data/ec2-deploy.sh && \
-             AWS_REGION='$AWS_REGION' \
+            "sed -i 's/\r$//' /opt/traffic-data/ec2-deploy.sh && chmod +x /opt/traffic-data/ec2-deploy.sh"
+
+      - name: Run deploy on EC2
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          POSTGRES_PASSWORD_B64="$(printf '%s' "$POSTGRES_PASSWORD" | base64 -w 0)"
+
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "AWS_REGION='$AWS_REGION' \
              ECR_REGISTRY='$ECR_REGISTRY' \
              ECR_BACKEND_REPOSITORY='$ECR_BACKEND_REPOSITORY' \
              ECR_FRONTEND_REPOSITORY='$ECR_FRONTEND_REPOSITORY' \
              IMAGE_TAG='$IMAGE_TAG' \
              FRONTEND_ORIGIN='$FRONTEND_ORIGIN' \
-             POSTGRES_PASSWORD='$POSTGRES_PASSWORD' \
+             POSTGRES_PASSWORD=\$(printf '%s' '$POSTGRES_PASSWORD_B64' | base64 -d) \
              /opt/traffic-data/ec2-deploy.sh"
