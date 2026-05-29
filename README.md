@@ -17,8 +17,8 @@ The dashboard loads traffic data from PostgreSQL on the EC2 host. When you merge
 
 | Requirement | Implementation |
 | --- | --- |
-| **Frontend: two interactive graphs** | **Country-wise:** `TopCountriesBar` (bar), `TotalTrafficTrend` (line). **Vehicle distribution:** `VehicleDistributionDonut` (pie/donut). Additional charts: stacked bar, cumulative area (see [frontend/README.md](frontend/README.md)). |
-| **Clean, responsive UI** | React + Vite + Tailwind CSS + shadcn/ui components; mobile-friendly grid and filters. |
+| **Frontend: two interactive graphs** | **Country-wise:** `TopCountriesBar` (bar), `TotalTrafficTrend` (line). **Vehicle distribution:** `VehicleDistributionDonut` (pie/donut). Additional charts: stacked bar, cumulative area (see [frontend/README.md](frontend/README.md)). All charts use **[Recharts](https://recharts.org/)** for rendering; layout uses **Tailwind CSS**. |
+| **Clean, responsive UI** | React + Vite + Tailwind CSS + shadcn/ui-style components; mobile-friendly grid and filters. |
 | **Backend API** | Node.js + Express; JSON REST under `/api/traffic/*`. |
 | **Database (PostgreSQL)** | Table `traffic_data`; CRUD on raw rows with automatic recalculation of chart rows. |
 | **Scalability (5 → 50 → 500 RPS)** | Documented below and in backend README. |
@@ -308,6 +308,7 @@ CI runs these on every push and before deploy.
 | **CI/CD** | Separate staging workflow; smoke tests against `/api/health` after deploy; blue/green on ECS. |
 | **Observability** | Structured logs to CloudWatch, alarms on 5xx rate and p95 latency. |
 | **Security** | Restrict SSH to GitHub IP ranges; AWS Secrets Manager for `POSTGRES_PASSWORD`; IMDSv2 on EC2. |
+| **Code quality** | Resolve all **ESLint** warnings/errors across frontend and backend (`eslint.config.js`), and add a lint job to GitHub Actions so CI fails on new issues. |
 
 ---
 

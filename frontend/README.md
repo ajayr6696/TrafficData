@@ -1,6 +1,6 @@
 # Traffic Data Frontend
 
-React + Vite dashboard for the traffic analytics assignment. The UI is responsive, filter-driven, and built with **Tailwind CSS**, **shadcn/ui-style components**, **Lucide** icons, and **Recharts** (via shadcn `chart` primitives).
+React + Vite dashboard for the traffic analytics assignment. Layout and UI chrome use **Tailwind CSS** and **shadcn/ui-style** components; **all graphs are drawn with [Recharts](https://recharts.org/)** (not Chart.js, D3, or a separate chart CSS framework).
 
 **Live app (production):** opened through the root README — the browser tab uses the same **Activity** pulse icon as the “Traffic analytics” badge in the header (`/favicon.svg` + `BrandMark` component).
 
@@ -46,16 +46,34 @@ frontend/
   vite.config.ts
 ```
 
-## Tailwind CSS and shadcn/ui
+## Charts: which library and which CSS?
+
+This is the stack used for **every** visualization on the dashboard:
+
+| Layer | Technology | Role |
+| --- | --- | --- |
+| **Chart rendering library** | **[Recharts](https://recharts.org/)** (`recharts` on npm) | Draws bars, lines, pie/donut, stacked bars, and areas. Components used include `BarChart`, `LineChart`, `PieChart`, `AreaChart`, `ResponsiveContainer`, `CartesianGrid`, `XAxis`, `YAxis`, `Tooltip`, `Legend`. |
+| **Chart styling** | **Recharts props + Tailwind on wrappers** | Series colors come from `src/components/charts/chartPalette.ts` and CSS variables (`--chart-1` … `--chart-5` in `src/index.css`). Recharts sets SVG fill/stroke via its `fill` props; there is **no** separate chart-only CSS file (e.g. not Chart.js CSS). |
+| **Tooltip / legend shell** | **Custom shadcn-style helpers** in `src/components/ui/chart.tsx` | `ChartContainer` (height/layout) and `ChartTooltipContent` (themed tooltip HTML). These are **not** a second chart library — they wrap Recharts tooltips. |
+| **Page layout around charts** | **Tailwind CSS v4** (`@tailwindcss/vite`) | Cards, grids, filters, typography (`ChartCard`, `dashboard/`, `components/ui/card.tsx`). |
+| **UI primitives (non-chart)** | **shadcn/ui pattern** + **Radix Slot** | Buttons, selects, badges — copied into `components/ui/`; unrelated to plotting. |
+
+**Summary:** Interactive graphs = **Recharts**. Page look-and-feel = **Tailwind CSS**. Tooltips/legend chrome = lightweight **chart.tsx** helpers inspired by [shadcn/ui charts](https://ui.shadcn.com/charts).
+
+Example import pattern (from `TopCountriesBar.tsx`):
+
+```tsx
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+```
+
+## Tailwind CSS and shadcn/ui (non-chart UI)
 
 | Piece | Role |
 | --- | --- |
 | **Tailwind** | Layout (`grid`, `flex`), spacing, typography, responsive breakpoints (`sm:`, `lg:`), and semantic colors (`bg-background`, `text-muted-foreground`). |
 | **shadcn/ui** | Accessible building blocks in `components/ui/` — not a heavy npm UI kit; you own the source files. |
 | **`cn()` utility** | Merges Tailwind classes (`clsx` + `tailwind-merge`) for variants. |
-| **`ChartContainer`** | Wraps Recharts charts with theme-aware colors from `chartPalette.ts`. |
-
-Charts do **not** use shadcn directly for drawing; they use **Recharts** (`BarChart`, `LineChart`, `PieChart`, `AreaChart`) inside shadcn `ChartContainer` for consistent tooltips and legends.
 
 ## Charts (assignment + extensions)
 
