@@ -182,6 +182,12 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           POSTGRES_PASSWORD_B64="$(printf '%s' "$POSTGRES_PASSWORD" | base64 -w 0)"
+          ECR_PASSWORD="$(aws ecr get-login-password --region "$AWS_REGION")"
+          ECR_PASSWORD_B64="$(printf '%s' "$ECR_PASSWORD" | base64 -w 0)"
+
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "printf '%s' '$ECR_PASSWORD_B64' | base64 -d | docker login --username AWS --password-stdin '$ECR_REGISTRY'"
 
           ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
             "$EC2_USER@$EC2_HOST" \
@@ -192,4 +198,5 @@ jobs:
              IMAGE_TAG='$IMAGE_TAG' \
              FRONTEND_ORIGIN='$FRONTEND_ORIGIN' \
              POSTGRES_PASSWORD=\$(printf '%s' '$POSTGRES_PASSWORD_B64' | base64 -d) \
+             SKIP_ECR_LOGIN=1 \
              /opt/traffic-data/ec2-deploy.sh"

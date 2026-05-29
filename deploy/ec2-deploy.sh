@@ -76,8 +76,13 @@ volumes:
   traffic-postgres-data:
 EOF
 
-aws ecr get-login-password --region "$AWS_REGION" \
-  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+if [ "${SKIP_ECR_LOGIN:-0}" != "1" ]; then
+  if ! aws ecr get-login-password --region "$AWS_REGION" 2>/dev/null \
+    | docker login --username AWS --password-stdin "$ECR_REGISTRY"; then
+    echo "ERROR: ECR login failed. Attach the EC2 IAM role with ECR pull permissions, or deploy via GitHub Actions (which logs in before this script runs)." >&2
+    exit 1
+  fi
+fi
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
