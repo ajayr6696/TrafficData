@@ -316,6 +316,7 @@ curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-comp
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 mkdir -p /opt/traffic-data/data
+chown -R ec2-user:ec2-user /opt/traffic-data
 ```
 
 10. Launch the instance and note its **public DNS** (for `EC2_HOST` and `FRONTEND_ORIGIN`).
