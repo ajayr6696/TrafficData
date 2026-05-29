@@ -182,21 +182,26 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           POSTGRES_PASSWORD_B64="$(printf '%s' "$POSTGRES_PASSWORD" | base64 -w 0)"
-          ECR_PASSWORD="$(aws ecr get-login-password --region "$AWS_REGION")"
-          ECR_PASSWORD_B64="$(printf '%s' "$ECR_PASSWORD" | base64 -w 0)"
+          DEPLOY_ENV="AWS_REGION='$AWS_REGION' \
+            ECR_REGISTRY='$ECR_REGISTRY' \
+            ECR_BACKEND_REPOSITORY='$ECR_BACKEND_REPOSITORY' \
+            ECR_FRONTEND_REPOSITORY='$ECR_FRONTEND_REPOSITORY' \
+            IMAGE_TAG='$IMAGE_TAG' \
+            FRONTEND_ORIGIN='$FRONTEND_ORIGIN' \
+            POSTGRES_PASSWORD=\$(printf '%s' '$POSTGRES_PASSWORD_B64' | base64 -d)"
 
-          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
-            "$EC2_USER@$EC2_HOST" \
-            "printf '%s' '$ECR_PASSWORD_B64' | base64 -d | docker login --username AWS --password-stdin '$ECR_REGISTRY'"
+          SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes"
 
-          ssh -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=yes \
-            "$EC2_USER@$EC2_HOST" \
-            "AWS_REGION='$AWS_REGION' \
-             ECR_REGISTRY='$ECR_REGISTRY' \
-             ECR_BACKEND_REPOSITORY='$ECR_BACKEND_REPOSITORY' \
-             ECR_FRONTEND_REPOSITORY='$ECR_FRONTEND_REPOSITORY' \
-             IMAGE_TAG='$IMAGE_TAG' \
-             FRONTEND_ORIGIN='$FRONTEND_ORIGIN' \
-             POSTGRES_PASSWORD=\$(printf '%s' '$POSTGRES_PASSWORD_B64' | base64 -d) \
-             SKIP_ECR_LOGIN=1 \
-             /opt/traffic-data/ec2-deploy.sh"
+          if ssh $SSH_OPTS "$EC2_USER@$EC2_HOST" "aws sts get-caller-identity >/dev/null 2>&1"; then
+            echo "Using EC2 instance role for ECR pull"
+            ssh $SSH_OPTS "$EC2_USER@$EC2_HOST" \
+              "$DEPLOY_ENV SKIP_ECR_LOGIN=0 /opt/traffic-data/ec2-deploy.sh"
+          else
+            echo "EC2 has no IAM credentials; using GitHub Actions role for ECR pull"
+            ECR_PASSWORD="$(aws ecr get-login-password --region "$AWS_REGION")"
+            ECR_PASSWORD_B64="$(printf '%s' "$ECR_PASSWORD" | base64 -w 0)"
+            ssh $SSH_OPTS "$EC2_USER@$EC2_HOST" \
+              "printf '%s' '$ECR_PASSWORD_B64' | base64 -d | docker login --username AWS --password-stdin '$ECR_REGISTRY'"
+            ssh $SSH_OPTS "$EC2_USER@$EC2_HOST" \
+              "$DEPLOY_ENV SKIP_ECR_LOGIN=1 /opt/traffic-data/ec2-deploy.sh"
+          fi
