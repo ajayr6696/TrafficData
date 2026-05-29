@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+.git
+.github
+*.log
+npm-debug.log*
+road_tf_veh_linear_2_0 2 _ cleaned.csv

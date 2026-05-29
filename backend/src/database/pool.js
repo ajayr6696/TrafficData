@@ -1,16 +1,13 @@
-import pg from 'pg';
-import { config } from '../constants/config.js';
+import sql from './db.js';
 
-const { Pool } = pg;
+export const query = async (text, params = []) => {
+  const rows = await sql.unsafe(text, params);
+  return {
+    rows,
+    rowCount: rows.length,
+  };
+};
 
-const pool = new Pool(
-  config.databaseUrl
-    ? { connectionString: config.databaseUrl }
-    : undefined,
-);
+export const closePool = () => sql.end();
 
-export const query = (text, params) => pool.query(text, params);
-
-export const closePool = () => pool.end();
-
-export default pool;
+export default sql;

@@ -1,12 +1,17 @@
 import app from './app.js';
 import { config } from './constants/config.js';
-// PostgreSQL connection disabled for CSV-backed local debugging.
-// import { ensureTrafficTable } from './database/migrations.js';
+import { ensureTrafficTable } from './database/migrations.js';
+import { seedTrafficDataIfNeeded } from './database/trafficDataImport.js';
 import logger from './logger/index.js';
 
 const startServer = async () => {
-  // PostgreSQL connection disabled for CSV-backed local debugging.
-  // await ensureTrafficTable();
+  if (config.databaseUrl) {
+    await ensureTrafficTable();
+    const seedResult = await seedTrafficDataIfNeeded({ logger });
+    if (seedResult.seeded) {
+      logger.info(seedResult, 'Traffic data seed complete');
+    }
+  }
 
   app.listen(config.port, () => {
     logger.info(`Traffic API listening on port ${config.port}`);

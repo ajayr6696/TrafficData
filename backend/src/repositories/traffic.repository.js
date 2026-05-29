@@ -1,4 +1,5 @@
 import { query } from '../database/pool.js';
+import { rebuildCalculatedTrafficRows } from '../database/trafficDataImport.js';
 import { TOTAL_VEHICLE_ID } from '../constants/config.js';
 
 const asNumber = (value) => Number(value || 0);
@@ -132,7 +133,9 @@ export class TrafficRepository {
       ],
     );
 
-    return mapTrafficRow(result.rows[0]);
+    const row = mapTrafficRow(result.rows[0]);
+    await rebuildCalculatedTrafficRows();
+    return row;
   }
 
   async update(id, payload) {
@@ -152,19 +155,30 @@ export class TrafficRepository {
         UPDATE traffic_data
         SET ${assignments.join(', ')}
         WHERE id = $${values.length}
+          AND is_calculated = FALSE
         RETURNING id, country_code, vehicle_id, year, traffic_volume, is_calculated
       `,
       values,
     );
 
-    return result.rows[0] ? mapTrafficRow(result.rows[0]) : null;
+    if (!result.rows[0]) {
+      return null;
+    }
+
+    const row = mapTrafficRow(result.rows[0]);
+    await rebuildCalculatedTrafficRows();
+    return row;
   }
 
   async remove(id) {
     const result = await query(
-      'DELETE FROM traffic_data WHERE id = $1 RETURNING id',
+      'DELETE FROM traffic_data WHERE id = $1 AND is_calculated = FALSE RETURNING id',
       [id],
     );
+
+    if (result.rowCount) {
+      await rebuildCalculatedTrafficRows();
+    }
 
     return Boolean(result.rowCount);
   }

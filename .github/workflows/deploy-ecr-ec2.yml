@@ -1,0 +1,154 @@
+name: Build, Push, and Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
+  ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY || secrets.ECR_BACKEND_REPOSITORY || 'traffic-data-backend' }}
+  ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY || secrets.ECR_FRONTEND_REPOSITORY || 'traffic-data-frontend' }}
+  EC2_HOST: ${{ vars.EC2_HOST || secrets.EC2_HOST }}
+  EC2_USER: ${{ vars.EC2_USER || secrets.EC2_USER || 'ec2-user' }}
+  FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || secrets.FRONTEND_ORIGIN || 'http://localhost' }}
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js for backend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Test backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm test
+
+      - name: Set up Node.js for frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+  build-push-deploy:
+    needs: quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials from OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repositories exist
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_BACKEND_REPOSITORY" >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name "$ECR_BACKEND_REPOSITORY" >/dev/null
+          aws ecr describe-repositories --repository-names "$ECR_FRONTEND_REPOSITORY" >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name "$ECR_FRONTEND_REPOSITORY" >/dev/null
+
+      - name: Build and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f backend/Dockerfile \
+            -t "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest" \
+            .
+          docker push "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest"
+
+      - name: Build and push frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg VITE_API_BASE_URL=/api \
+            -t "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest" \
+            ./frontend
+          docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest"
+
+      - name: Deploy to EC2 over SSH
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          if [ -z "$EC2_HOST" ]; then
+            echo "EC2_HOST repository variable or secret is required."
+            exit 1
+          fi
+
+          if [ -z "$EC2_SSH_PRIVATE_KEY" ]; then
+            echo "EC2_SSH_PRIVATE_KEY secret is required."
+            exit 1
+          fi
+
+          if [ -z "$POSTGRES_PASSWORD" ]; then
+            echo "POSTGRES_PASSWORD secret is required."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" "mkdir -p /opt/traffic-data/data"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            deploy/ec2-deploy.sh \
+            "$EC2_USER@$EC2_HOST:/opt/traffic-data/ec2-deploy.sh"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "road_tf_veh_linear_2_0 2 _ cleaned.csv" \
+            "$EC2_USER@$EC2_HOST:/opt/traffic-data/data/"
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "chmod +x /opt/traffic-data/ec2-deploy.sh && \
+             AWS_REGION='$AWS_REGION' \
+             ECR_REGISTRY='$ECR_REGISTRY' \
+             ECR_BACKEND_REPOSITORY='$ECR_BACKEND_REPOSITORY' \
+             ECR_FRONTEND_REPOSITORY='$ECR_FRONTEND_REPOSITORY' \
+             IMAGE_TAG='$IMAGE_TAG' \
+             FRONTEND_ORIGIN='$FRONTEND_ORIGIN' \
+             POSTGRES_PASSWORD='$POSTGRES_PASSWORD' \
+             /opt/traffic-data/ec2-deploy.sh"

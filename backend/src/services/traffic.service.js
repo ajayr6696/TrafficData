@@ -13,9 +13,12 @@ import {
   VEHICLE_HIERARCHY_GROUPS,
   VEHICLE_METADATA,
 } from '../constants/trafficMetadata.js';
-// PostgreSQL connection disabled for CSV-backed local debugging.
-// import { trafficRepository } from '../repositories/traffic.repository.js';
-import { csvTrafficRepository as trafficRepository } from '../repositories/csvTraffic.repository.js';
+import { config } from '../constants/config.js';
+import { csvTrafficRepository } from '../repositories/csvTraffic.repository.js';
+
+const trafficRepository = config.databaseUrl && config.env !== 'test'
+  ? (await import('../repositories/traffic.repository.js')).trafficRepository
+  : csvTrafficRepository;
 
 const stripEmpty = (filters) => Object.fromEntries(
   Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== ''),

@@ -18,13 +18,17 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: traffic-backend
     environment:
       PORT: 4000
       NODE_ENV: production
       FRONTEND_ORIGIN: http://localhost:5173,http://localhost:8080
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/traffic_data
+      CSV_PATH: /app/data/road_tf_veh_linear_2_0 2 _ cleaned.csv
+    volumes:
+      - ./road_tf_veh_linear_2_0 2 _ cleaned.csv:/app/data/road_tf_veh_linear_2_0 2 _ cleaned.csv:ro
     ports:
       - "4000:4000"
     depends_on:
@@ -35,7 +39,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://localhost:4000/api
+        VITE_API_BASE_URL: /api
     container_name: traffic-frontend
     ports:
       - "8080:80"

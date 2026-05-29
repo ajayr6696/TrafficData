@@ -1,8 +1,8 @@
 # Traffic Data Backend
 
-Node.js + Express API for traffic analytics. For the current local-debug mode, the API reads directly from the CSV file at `D:\road_tf_veh_linear_2_0 2 _ cleaned.csv`. PostgreSQL startup wiring is commented out in `src/index.js` and the service is temporarily wired to the CSV repository.
+Node.js + Express API for traffic analytics. The API prefers PostgreSQL when `DATABASE_URL` is present and falls back to the CSV repository otherwise.
 
-CSV rows are normalized in memory when the API first loads the data. PostgreSQL imports use the same calculated-row normalization.
+CSV rows are normalized in memory when the API first loads the data. PostgreSQL startup and import paths use the same calculated-row normalization.
 
 ## Setup
 
@@ -12,7 +12,7 @@ npm install
 copy .env.example .env
 ```
 
-Update `CSV_PATH` in `.env` only if your CSV is in a different location.
+Update `CSV_PATH` in `.env` only if your CSV is in a different location. Set `DATABASE_URL` to point at PostgreSQL when you want the backend to use the database instead of CSV.
 
 ```bash
 npm run dev
@@ -41,7 +41,7 @@ The CSV must have these columns:
 vehicle_id,country_code,year,traffic_volume
 ```
 
-The API assigns in-memory row IDs when it loads the CSV. `POST`, `PUT`, and `DELETE` mutate the in-memory dataset for the current server process; restarting the backend reloads from the CSV file.
+The API assigns in-memory row IDs when it loads the CSV. `POST`, `PUT`, and `DELETE` mutate the in-memory dataset for the current server process; restarting the backend reloads from the CSV file. With PostgreSQL enabled, the same endpoints use the database-backed repository instead.
 
 ## PostgreSQL Table For Later
 
@@ -56,7 +56,7 @@ CREATE TABLE traffic_data (
 );
 ```
 
-When PostgreSQL is re-enabled, indexes are created automatically on startup/import for country, vehicle, and year filters.
+When PostgreSQL is enabled, indexes are created automatically on startup/import for country, vehicle, year, and calculated-row filters.
 
 ## API
 
@@ -92,4 +92,4 @@ npm test
 
 ## Scaling Notes
 
-At 5 RPS in CSV mode, one API instance with an in-memory parsed CSV cache is sufficient. At 50 RPS, keep the API stateless and add response caching for common chart filters. At 500 RPS, re-enable PostgreSQL, add read replicas, Redis caching for dashboard aggregates, precomputed materialized views by year/country/vehicle, horizontal API autoscaling, and query-level observability to keep slow aggregations visible.
+At 5 RPS in CSV mode, one API instance with an in-memory parsed CSV cache is sufficient. At 50 RPS, keep the API stateless and add response caching for common chart filters. At 500 RPS, use PostgreSQL, add read replicas, Redis caching for dashboard aggregates, precomputed materialized views by year/country/vehicle, horizontal API autoscaling, and query-level observability to keep slow aggregations visible.

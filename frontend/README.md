@@ -28,14 +28,16 @@ npm run build
 
 ## Dashboard
 
-The UI exposes global filters for country, vehicle type, start year, and end year. Six charts are rendered from backend aggregation endpoints:
+The UI exposes global filters for country, vehicle type, start year, and end year. Six charts are rendered from backend aggregation endpoints and the dashboard opens with Cumulative growth first:
 
+- Cumulative growth area chart
 - Total traffic trend line chart
 - Top 10 countries bar chart
 - Vehicle distribution donut chart
 - Yearly stacked vehicle mix
-- Grouped two-country comparison
 - Cumulative composition area chart
+
+The summary row at the top shows 17 source vehicle categories and the full country list is available on hover.
 
 ## Tests
 

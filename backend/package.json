@@ -6,6 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
+    "dev:csv": "nodemon scripts/runCsv.js",
+    "dev:postgres": "nodemon scripts/runPostgres.js",
     "debug": "node --inspect src/index.js",
     "debug:watch": "nodemon --inspect src/index.js",
     "start": "node src/index.js",
@@ -31,7 +33,8 @@
     "helmet": "latest",
     "pg": "latest",
     "pino": "latest",
-    "pino-pretty": "latest"
+    "pino-pretty": "latest",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@eslint/js": "latest",
