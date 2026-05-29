@@ -4,3 +4,6 @@ node_modules
 coverage
 dist
 npm-debug.log*
+
+# Local AWS IAM policy templates (used in console setup only; not needed in CI)
+deploy/aws/
