@@ -1,0 +1,44 @@
+{
+  "name": "traffic-data-backend",
+  "version": "1.0.0",
+  "description": "Node.js API for traffic data analytics backed by PostgreSQL.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "debug": "node --inspect src/index.js",
+    "debug:watch": "nodemon --inspect src/index.js",
+    "start": "node src/index.js",
+    "import:data": "node scripts/importData.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "traffic",
+    "postgresql",
+    "express",
+    "analytics"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ajv": "latest",
+    "ajv-formats": "latest",
+    "cors": "latest",
+    "csv-parse": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "helmet": "latest",
+    "pg": "latest",
+    "pino": "latest",
+    "pino-pretty": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "globals": "latest",
+    "nodemon": "latest",
+    "supertest": "latest",
+    "vitest": "latest"
+  }
+}

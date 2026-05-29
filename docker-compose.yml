@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: traffic-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: traffic_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - traffic-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d traffic_data"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: traffic-backend
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      FRONTEND_ORIGIN: http://localhost:5173,http://localhost:8080
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/traffic_data
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:4000/api
+    container_name: traffic-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  traffic-postgres-data:
