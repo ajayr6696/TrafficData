@@ -65,7 +65,7 @@ Indexes exist on `(country_code, year)`, `(vehicle_id, year)`, `(country_code, v
 
 ### Countries in the dataset (32)
 
-AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, MK, MT, NL, NO, PL, PT, RO, SE, SI, TR, UA, UK — labels in `trafficMetadata.js`.
+AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, MK, MT, NL, NO, PL, PT, RO, SE, SI, TR, UA, UK  - labels in `trafficMetadata.js`.
 
 ### Source vehicle codes in CSV (17)
 
@@ -73,7 +73,7 @@ AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, 
 
 Calculated parent rows (e.g. rolled-up `LOR`, `BUS`, chart `TOTAL`) are stored with `is_calculated = true`. See root `README.md` for normalization rules.
 
-### Supabase (free PostgreSQL) — local / optional hosted DB
+### Supabase (free PostgreSQL)  - local / optional hosted DB
 
 You can use [Supabase](https://supabase.com/) as a managed PostgreSQL instance instead of local Docker Postgres:
 
@@ -119,14 +119,14 @@ npm install
 copy .env.example .env
 ```
 
-**Option A — PostgreSQL (recommended, matches assignment)**
+**Option A  - PostgreSQL (recommended, matches assignment)**
 
 ```bash
 # Start Postgres (Docker Compose from repo root, or Supabase DATABASE_URL in .env)
 npm run dev:postgres
 ```
 
-**Option B — CSV only (no database)**
+**Option B  - CSV only (no database)**
 
 ```bash
 npm run dev:csv
@@ -154,7 +154,7 @@ npm run import:data -- --truncate
 npm test
 ```
 
-Tests use **Vitest** and **mocked repositories** — no live PostgreSQL required in CI.
+Tests use **Vitest** and **mocked repositories**  - no live PostgreSQL required in CI.
 
 ## Scaling (assignment requirement)
 

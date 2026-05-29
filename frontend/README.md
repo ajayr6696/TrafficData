@@ -2,16 +2,16 @@
 
 React + Vite dashboard for the traffic analytics assignment. Layout and UI chrome use **Tailwind CSS** and **shadcn/ui-style** components; **all graphs are drawn with [Recharts](https://recharts.org/)** (not Chart.js, D3, or a separate chart CSS framework).
 
-**Live app (production):** opened through the root README — the browser tab uses the same **Activity** pulse icon as the “Traffic analytics” badge in the header (`/favicon.svg` + `BrandMark` component).
+**Live app (production):** opened through the root README  - the browser tab uses the same **Activity** pulse icon as the “Traffic analytics” badge in the header (`/favicon.svg` + `BrandMark` component).
 
-**Dataset:** [Eurostat `road_tf_veh`](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en) — million VKM by country, year, and vehicle type (see root README for why this source was chosen).
+**Dataset:** [Eurostat `road_tf_veh`](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en)  - million VKM by country, year, and vehicle type (see root README for why this source was chosen).
 
 ## How this folder was created
 
 1. **Vite + React + TypeScript** scaffold (`npm create vite@latest` pattern).
 2. **Tailwind CSS** added with `tailwind.config.ts` and `src/index.css` (CSS variables for theme colors).
 3. **shadcn/ui** initialized via `components.json` (style: `default`, base color: `slate`, path alias `@/`).
-4. UI primitives added under `src/components/ui/` (`button`, `card`, `badge`, `select`, `chart`, etc.) — copied/adapted from [shadcn/ui](https://ui.shadcn.com/) rather than a separate design system.
+4. UI primitives added under `src/components/ui/` (`button`, `card`, `badge`, `select`, `chart`, etc.)  - copied/adapted from [shadcn/ui](https://ui.shadcn.com/) rather than a separate design system.
 5. **Recharts** wired through `components/ui/chart.tsx` (`ChartContainer`, `ChartTooltipContent`) for consistent theming.
 6. Feature folders added for charts, dashboard layout, API hooks, and shared utilities.
 
@@ -56,9 +56,9 @@ This is the stack used for **every** visualization on the dashboard:
 | --- | --- | --- |
 | **Chart rendering library** | **[Recharts](https://recharts.org/)** (`recharts` on npm) | Draws bars, lines, pie/donut, stacked bars, and areas. Components used include `BarChart`, `LineChart`, `PieChart`, `AreaChart`, `ResponsiveContainer`, `CartesianGrid`, `XAxis`, `YAxis`, `Tooltip`, `Legend`. |
 | **Chart styling** | **Recharts props + Tailwind on wrappers** | Series colors come from `src/components/charts/chartPalette.ts` and CSS variables (`--chart-1` … `--chart-5` in `src/index.css`). Recharts sets SVG fill/stroke via its `fill` props; there is **no** separate chart-only CSS file (e.g. not Chart.js CSS). |
-| **Tooltip / legend shell** | **Custom shadcn-style helpers** in `src/components/ui/chart.tsx` | `ChartContainer` (height/layout) and `ChartTooltipContent` (themed tooltip HTML). These are **not** a second chart library — they wrap Recharts tooltips. |
+| **Tooltip / legend shell** | **Custom shadcn-style helpers** in `src/components/ui/chart.tsx` | `ChartContainer` (height/layout) and `ChartTooltipContent` (themed tooltip HTML). These are **not** a second chart library  - they wrap Recharts tooltips. |
 | **Page layout around charts** | **Tailwind CSS v4** (`@tailwindcss/vite`) | Cards, grids, filters, typography (`ChartCard`, `dashboard/`, `components/ui/card.tsx`). |
-| **UI primitives (non-chart)** | **shadcn/ui pattern** + **Radix Slot** | Buttons, selects, badges — copied into `components/ui/`; unrelated to plotting. |
+| **UI primitives (non-chart)** | **shadcn/ui pattern** + **Radix Slot** | Buttons, selects, badges  - copied into `components/ui/`; unrelated to plotting. |
 
 **Summary:** Interactive graphs = **Recharts**. Page look-and-feel = **Tailwind CSS**. Tooltips/legend chrome = lightweight **chart.tsx** helpers inspired by [shadcn/ui charts](https://ui.shadcn.com/charts).
 
@@ -74,7 +74,7 @@ import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 | Piece | Role |
 | --- | --- |
 | **Tailwind** | Layout (`grid`, `flex`), spacing, typography, responsive breakpoints (`sm:`, `lg:`), and semantic colors (`bg-background`, `text-muted-foreground`). |
-| **shadcn/ui** | Accessible building blocks in `components/ui/` — not a heavy npm UI kit; you own the source files. |
+| **shadcn/ui** | Accessible building blocks in `components/ui/`  - not a heavy npm UI kit; you own the source files. |
 | **`cn()` utility** | Merges Tailwind classes (`clsx` + `tailwind-merge`) for variants. |
 
 ## Charts (assignment + extensions)
@@ -83,9 +83,9 @@ The assignment asks for **country-wise traffic** and **vehicle type distribution
 
 | Chart component | Type | What it shows |
 | --- | --- | --- |
-| `TopCountriesBar` | **Bar** | **Country-wise traffic** — top N countries for a selected year and vehicle class (default calculated `TOTAL`). |
-| `TotalTrafficTrend` | **Line** | **Country-wise traffic over time** — total volume trend for one country between start/end years. |
-| `VehicleDistributionDonut` | **Pie / donut** | **Vehicle type distribution** — share of parent vehicle classes (CAR, LOR, BUS, etc.) for one country and year. |
+| `TopCountriesBar` | **Bar** | **Country-wise traffic**  - top N countries for a selected year and vehicle class (default calculated `TOTAL`). |
+| `TotalTrafficTrend` | **Line** | **Country-wise traffic over time**  - total volume trend for one country between start/end years. |
+| `VehicleDistributionDonut` | **Pie / donut** | **Vehicle type distribution**  - share of parent vehicle classes (CAR, LOR, BUS, etc.) for one country and year. |
 | `YearlyStackedTraffic` | **Stacked bar** | Vehicle mix by year for one country (stacked parent categories). |
 | `CumulativeCompositionArea` (growth) | **Area** | Cumulative traffic growth by vehicle class over years. |
 | `CumulativeCompositionArea` (mix) | **Area** | Cumulative composition / mix view for the same filters. |

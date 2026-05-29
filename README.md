@@ -13,7 +13,7 @@ The dashboard loads traffic data from PostgreSQL on the EC2 host. When you merge
 
 ---
 
-## Assignment requirements — how this repo answers them
+## Assignment requirements  - how this repo answers them
 
 | Requirement | Implementation |
 | --- | --- |
@@ -65,7 +65,7 @@ flowchart TB
 3. On deploy, GitHub Actions **copies the CSV to the EC2 host** and mounts it into the backend container for one-time/auto seeding.
 4. PostgreSQL on EC2 holds raw + calculated rows after seed.
 
-**Optional local database:** [Supabase](https://supabase.com/) free tier PostgreSQL — set `DATABASE_URL` in `backend/.env`; SSL is enabled automatically for `supabase.co` hosts. See [backend/README.md](backend/README.md).
+**Optional local database:** [Supabase](https://supabase.com/) free tier PostgreSQL  - set `DATABASE_URL` in `backend/.env`; SSL is enabled automatically for `supabase.co` hosts. See [backend/README.md](backend/README.md).
 
 ---
 
@@ -92,12 +92,12 @@ IAM policy templates for AWS setup are kept locally under `deploy/aws/` (gitigno
 
 ### Data source
 
-The traffic figures come from **[Eurostat — Road traffic (vehicles)](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en)** (`road_tf_veh`), exported and cleaned into `road_tf_veh_linear_2_0 2 _ cleaned.csv` in this repository.
+The traffic figures come from **[Eurostat  - Road traffic (vehicles)](https://ec.europa.eu/eurostat/databrowser/view/road_tf_veh/default/table?lang=en)** (`road_tf_veh`), exported and cleaned into `road_tf_veh_linear_2_0 2 _ cleaned.csv` in this repository.
 
 **Why this dataset:** it matches the assignment’s two analytical dimensions in one table:
 
-1. **Traffic volume** — reported in **million vehicle-kilometres (VKM)** (`traffic_volume` in the app), suitable for country totals and time trends.
-2. **Vehicle type** — broken down by `vehicle_id` (cars, lorries, buses, motorcycles, etc.), suitable for distribution and composition charts.
+1. **Traffic volume**  - reported in **million vehicle-kilometres (VKM)** (`traffic_volume` in the app), suitable for country totals and time trends.
+2. **Vehicle type**  - broken down by `vehicle_id` (cars, lorries, buses, motorcycles, etc.), suitable for distribution and composition charts.
 
 That combination supports both required views (country-wise traffic and vehicle-type distribution) without merging separate datasets.
 
@@ -162,7 +162,7 @@ copy .env.example .env
 **PostgreSQL mode (assignment-complete):**
 
 ```powershell
-# From repo root — starts Postgres + seeds from mounted CSV
+# From repo root  - starts Postgres + seeds from mounted CSV
 docker compose up postgres -d
 
 cd D:\TrafficData\backend
@@ -175,7 +175,7 @@ npm run dev:postgres
 npm run dev:csv
 ```
 
-API: `http://localhost:4000` — health: `GET /api/health`
+API: `http://localhost:4000`  - health: `GET /api/health`
 
 **One-time import (Supabase or local Postgres):**
 
@@ -236,7 +236,7 @@ sequenceDiagram
   GH->>IAM: AssumeRoleWithWebIdentity
   IAM-->>GH: temporary AWS credentials
   GH->>ECR: docker build + push backend/frontend
-  GH->>EC2: SSH — copy ec2-deploy.sh + CSV
+  GH->>EC2: SSH  - copy ec2-deploy.sh + CSV
   alt EC2 has IAM instance profile
     EC2->>ECR: docker login + pull (instance role)
   else
@@ -247,7 +247,7 @@ sequenceDiagram
 
 | Step | What happens |
 | --- | --- |
-| **quality** | Same tests as CI — deploy blocked if tests fail. |
+| **quality** | Same tests as CI  - deploy blocked if tests fail. |
 | **Configure AWS credentials** | `aws-actions/configure-aws-credentials@v4` with `AWS_ROLE_TO_ASSUME` (no stored access keys). |
 | **Login to ECR** | Push images tagged with `github.sha` and `latest`. |
 | **Copy deploy assets** | `scp` `deploy/ec2-deploy.sh` and CSV to `/opt/traffic-data/` on EC2. |
@@ -308,14 +308,14 @@ CI runs these on every push and before deploy.
 
 | Area | Idea |
 | --- | --- |
-| **Assets / performance** | Store logo and static assets in **S3 + CloudFront** instead of bundling in the frontend image — faster global render and smaller deploy artifacts. |
+| **Assets / performance** | Store logo and static assets in **S3 + CloudFront** instead of bundling in the frontend image  - faster global render and smaller deploy artifacts. |
 | **HTTPS / domain** | Register a domain (Route 53), issue **ACM** certificate, terminate TLS on **ALB** or CloudFront instead of plain HTTP on EC2. |
 | **Load balancing** | Put an **ALB** in front of several EC2 instances (or ECS tasks) for HA and horizontal scale. |
 | **Containers** | Move from single-host Compose to **ECS Fargate** or **EKS** with task autoscaling. |
 | **Database** | **RDS PostgreSQL** or Supabase with read replicas; migrate off containerized Postgres on EC2. |
 | **Cache** | **ElastiCache (Redis)** for filter metadata and heavy chart endpoints (TTL per country/year). |
 | **Async updates** | On raw row **POST/PUT/DELETE**, publish to **SQS**; **Lambda** or worker tasks recalculate aggregates instead of blocking the request path. |
-| **IaC** | **Terraform** or AWS CDK for VPC, EC2/ECS, ECR, IAM OIDC, ALB, RDS, and secrets — reproducible environments. |
+| **IaC** | **Terraform** or AWS CDK for VPC, EC2/ECS, ECR, IAM OIDC, ALB, RDS, and secrets  - reproducible environments. |
 | **CI/CD** | Separate staging workflow; smoke tests against `/api/health` after deploy; blue/green on ECS. |
 | **Observability** | Structured logs to CloudWatch, alarms on 5xx rate and p95 latency. |
 | **Security** | Restrict SSH to GitHub IP ranges; AWS Secrets Manager for `POSTGRES_PASSWORD`; IMDSv2 on EC2. |
@@ -326,12 +326,12 @@ CI runs these on every push and before deploy.
 ## API reference (short)
 
 - `GET /api/health`
-- `GET /api/traffic/filters` — metadata for UI filters
-- `GET /api/traffic/trend` — country line chart
-- `GET /api/traffic/top-countries` — country bar chart
-- `GET /api/traffic/distribution` — vehicle donut
+- `GET /api/traffic/filters`  - metadata for UI filters
+- `GET /api/traffic/trend`  - country line chart
+- `GET /api/traffic/top-countries`  - country bar chart
+- `GET /api/traffic/distribution`  - vehicle donut
 - `GET /api/traffic/stacked`, `/cumulative`, `/compare`, …
-- `POST|PUT|DELETE /api/traffic` — mutate raw rows (PostgreSQL recalculates)
+- `POST|PUT|DELETE /api/traffic`  - mutate raw rows (PostgreSQL recalculates)
 
 Full list: [backend/README.md](backend/README.md).
 
