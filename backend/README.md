@@ -73,9 +73,9 @@ AT, BE, BG, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GE, HR, HU, IE, IS, IT, LT, LV, 
 
 Calculated parent rows (e.g. rolled-up `LOR`, `BUS`, chart `TOTAL`) are stored with `is_calculated = true`. See root `README.md` for normalization rules.
 
-### Supabase (free PostgreSQL)  - local / optional hosted DB
+### Supabase PostgreSQL
 
-You can use [Supabase](https://supabase.com/) as a managed PostgreSQL instance instead of local Docker Postgres:
+The deployed Node.js API connects directly to [Supabase](https://supabase.com/) using `DATABASE_URL`. Local Docker Postgres is only for local development if you want it.
 
 1. Create a project → **Settings → Database** → copy the connection string (pooler port `6543` is fine for the API).
 2. Set in `backend/.env`:
@@ -91,7 +91,7 @@ DATABASE_URL=postgres://postgres.<project-ref>:<password>@aws-0-<region>.pooler.
 npm run import:data -- --truncate
 ```
 
-**Production on AWS (this repo’s default deploy):** PostgreSQL runs in Docker on the **EC2** instance; Supabase is optional for development only.
+**Production on AWS:** EC2 runs only the backend and frontend containers. PostgreSQL is Supabase, reached by the Node.js server through `DATABASE_URL`.
 
 ## API (assignment: deliver traffic data + updates)
 

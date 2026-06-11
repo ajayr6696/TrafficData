@@ -242,7 +242,8 @@ sequenceDiagram
   else
     GH->>EC2: docker login using CI token
   end
-  EC2->>EC2: docker compose up (Postgres + API + Nginx)
+  EC2->>EC2: docker compose up (API + Nginx)
+  API->>Supabase: connect through DATABASE_URL
 ```
 
 | Step | What happens |
@@ -250,8 +251,8 @@ sequenceDiagram
 | **quality** | Same tests as CI  - deploy blocked if tests fail. |
 | **Configure AWS credentials** | `aws-actions/configure-aws-credentials@v4` with `AWS_ROLE_TO_ASSUME` (no stored access keys). |
 | **Login to ECR** | Push images tagged with `github.sha` and `latest`. |
-| **Copy deploy assets** | `scp` `deploy/ec2-deploy.sh` and CSV to `/opt/traffic-data/` on EC2. |
-| **Run deploy on EC2** | `docker compose pull && up -d` for Postgres, backend, frontend. |
+| **Copy deploy assets** | `scp` only `deploy/ec2-deploy.sh` to `/opt/traffic-data/` on EC2. The CSV is not uploaded. |
+| **Run deploy on EC2** | `docker compose pull && up -d` for backend and frontend. Backend connects to Supabase with `DATABASE_URL`. |
 
 ### AWS services used
 
@@ -260,16 +261,17 @@ sequenceDiagram
 | **IAM OIDC provider** | Trust `token.actions.githubusercontent.com` for GitHub Actions. |
 | **IAM role (GitHub)** | ECR push (+ pull token fallback for deploy). |
 | **Amazon ECR** | Private registry for `traffic-data-backend` and `traffic-data-frontend`. |
-| **Amazon EC2** | Single host running Docker Compose (Postgres + app). |
+| **Amazon EC2** | Single host running Docker Compose for the backend API and Nginx frontend. |
 | **IAM role (EC2)** | ECR pull on the instance (recommended). |
+| **Supabase PostgreSQL** | Managed PostgreSQL database used by the Node.js backend through `DATABASE_URL`. |
 
-No RDS, SSM, or Lambda in the current pipeline.
+No RDS, SSM, or Lambda is used in the current pipeline.
 
 ### GitHub configuration
 
 **Variables:** `AWS_REGION`, `AWS_ROLE_TO_ASSUME`, `EC2_HOST`, `FRONTEND_ORIGIN`, optional `EC2_USER`, ECR repo names.
 
-**Secrets:** `EC2_SSH_PRIVATE_KEY`, `POSTGRES_PASSWORD`.
+**Secrets:** `EC2_SSH_PRIVATE_KEY`, `DATABASE_URL`.
 
 Detailed AWS console steps were documented during initial setup; IAM JSON templates live in local `deploy/aws/`.
 
@@ -298,8 +300,8 @@ CI runs these on every push and before deploy.
 
 | Target | Design |
 | --- | --- |
-| **5 RPS** | One EC2 instance (current), one Postgres container, indexed `traffic_data` table. |
-| **50 RPS** | Application Load Balancer in front of multiple EC2 instances or target groups; managed PostgreSQL (RDS or Supabase Pro); Redis/ElastiCache for `/api/traffic/*` aggregate caching; connection pooling (PgBouncer). |
+| **5 RPS** | One EC2 instance (current) for backend/frontend containers, Supabase PostgreSQL, indexed `traffic_data` table. |
+| **50 RPS** | Application Load Balancer in front of multiple EC2 instances or target groups; Supabase Pro or another managed PostgreSQL tier; Redis/ElastiCache for `/api/traffic/*` aggregate caching; connection pooling through Supabase pooler/PgBouncer. |
 | **500 RPS** | **ECS or Fargate** for stateless API and frontend tasks with autoscaling; read replicas for analytics queries; precomputed materialized views; API rate limiting; CloudWatch + X-Ray tracing. |
 
 ---
@@ -312,13 +314,13 @@ CI runs these on every push and before deploy.
 | **HTTPS / domain** | Register a domain (Route 53), issue **ACM** certificate, terminate TLS on **ALB** or CloudFront instead of plain HTTP on EC2. |
 | **Load balancing** | Put an **ALB** in front of several EC2 instances (or ECS tasks) for HA and horizontal scale. |
 | **Containers** | Move from single-host Compose to **ECS Fargate** or **EKS** with task autoscaling. |
-| **Database** | **RDS PostgreSQL** or Supabase with read replicas; migrate off containerized Postgres on EC2. |
+| **Database** | Scale Supabase plan/pooler and add read replicas if needed; keep EC2 stateless by avoiding local database containers. |
 | **Cache** | **ElastiCache (Redis)** for filter metadata and heavy chart endpoints (TTL per country/year). |
 | **Async updates** | On raw row **POST/PUT/DELETE**, publish to **SQS**; **Lambda** or worker tasks recalculate aggregates instead of blocking the request path. |
-| **IaC** | **Terraform** or AWS CDK for VPC, EC2/ECS, ECR, IAM OIDC, ALB, RDS, and secrets  - reproducible environments. |
+| **IaC** | **Terraform** or AWS CDK for VPC, EC2/ECS, ECR, IAM OIDC, ALB, and GitHub/AWS secret wiring  - reproducible environments. |
 | **CI/CD** | Separate staging workflow; smoke tests against `/api/health` after deploy; blue/green on ECS. |
 | **Observability** | Structured logs to CloudWatch, alarms on 5xx rate and p95 latency. |
-| **Security** | Restrict SSH to GitHub IP ranges; AWS Secrets Manager for `POSTGRES_PASSWORD`; IMDSv2 on EC2. |
+| **Security** | Restrict SSH to GitHub IP ranges; store Supabase `DATABASE_URL` only in GitHub Secrets or AWS Secrets Manager; enable IMDSv2 on EC2. |
 | **Code quality** | Resolve all **ESLint** warnings/errors across frontend and backend (`eslint.config.js`), and add a lint job to GitHub Actions so CI fails on new issues. |
 
 ---
